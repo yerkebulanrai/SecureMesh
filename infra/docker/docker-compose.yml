@@ -1,7 +1,20 @@
-version: '3.8'
-
 services:
-  # Основная БД (Пользователи, ключи, сообщения)
+  # === Наше Go-приложение ===
+  app:
+    build:
+      context: ../../backend # Путь к папке backend относительно этого файла
+      dockerfile: Dockerfile
+    container_name: securemesh_api
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - ../../.env # Читаем .env из корня
+
+  # === База данных ===
   postgres:
     image: postgres:16-alpine
     container_name: securemesh_db
@@ -10,23 +23,24 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
+    # Внутренний порт 5432, внешний не обязателен для production, 
+    # но можно оставить для удобства
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  # Кэш и Pub/Sub для WebSocket
+  # === Redis ===
   redis:
     image: redis:7-alpine
     container_name: securemesh_redis
     restart: always
     ports:
-      - "6380:6379"
-    command: redis-server --save 60 1 --loglevel warning
+      - "6379:6379"
     volumes:
       - redis_data:/data
 
-  # Файловое хранилище (S3 compatible)
+  # === MinIO ===
   minio:
     image: minio/minio
     container_name: securemesh_minio
