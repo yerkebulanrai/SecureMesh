@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package securemesh;
+
+option go_package = "github.com/yerkebulanrai/securemesh/backend/pkg/proto";
+
+message WebSocketMessage {
+  enum Type {
+    UNKNOWN = 0;
+    AUTH = 1;
+    TEXT_MESSAGE = 2;
+    ACK = 3;
+    TYPING = 4;
+    ERROR = 5;
+  }
+
+  Type type = 1;
+  string id = 2;
+  bytes payload = 3;
+  int64 timestamp = 4;
+  
+  // === НОВЫЕ ПОЛЯ ===
+  string sender_id = 5;    // Кто отправил (UUID)
+  string recipient_id = 6; // Кому отправить (UUID)
+}
+
+message AckPayload {
+  string message_id = 1;
+  string sender_id = 2;
+}
