@@ -11,7 +11,7 @@ enum NetworkError: Error {
 // actor гарантирует потокобезопасность (Swift 6 Concurrency)
 actor AuthService {
     // В симуляторе localhost работает нормально
-    private let baseURL = "http://192.168.12.67:8080"
+    private let baseURL = "http://159.89.45.247:8080"
     
     func register(username: String, publicKey: String) async throws -> RegisterResponse {
         // 1. Формируем URL

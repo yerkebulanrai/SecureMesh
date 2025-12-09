@@ -59,7 +59,7 @@ func main() {
 	// === NEW: Роуты ===
 	e.POST("/register", authHandler.Register)
 	// ==================
-
+	e.POST("/auth/token", authHandler.GetToken)
 	e.GET("/keys/:id", authHandler.GetKey)
 	
 	// Тест

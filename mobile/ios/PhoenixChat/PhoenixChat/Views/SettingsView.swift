@@ -1,10 +1,12 @@
 import SwiftUI
+import SwiftData // 1. Импортируем SwiftData
 
 struct SettingsView: View {
     @EnvironmentObject var appState: AppStateManager
     
-    // Получаем ID из CryptoService (или сохраняем его где-то отдельно)
-    // Пока возьмем публичный ключ как идентификатор для красоты
+    // 2. Получаем доступ к базе данных, чтобы удалять
+    @Environment(\.modelContext) private var context
+    
     var publicKeyInfo: String {
         CryptoService.shared.getPublicKeyString() ?? "Неизвестно"
     }
@@ -28,7 +30,6 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 8)
                     
-                    // Показываем ключ (или ID)
                     VStack(alignment: .leading) {
                         Text("Мой Public Key")
                             .font(.caption)
@@ -48,17 +49,28 @@ struct SettingsView: View {
                     Toggle("Блокировка скриншотов", isOn: .constant(true))
                 }
                 
+                // === КНОПКА ВЫХОДА ===
                 Section {
                     Button(role: .destructive) {
-                        appState.logout()
+                        performLogout()
                     } label: {
                         Text("Выйти из аккаунта")
                     }
                 } footer: {
-                    Text("При выходе ключи шифрования будут удалены с устройства. Историю переписки восстановить будет невозможно.")
+                    Text("При выходе ключи и история переписки будут безвозвратно удалены с устройства.")
                 }
             }
             .navigationTitle("Настройки")
         }
     }
+    
+    // 3. Функция полного уничтожения данных
+    func performLogout() {
+            try? context.delete(model: MessageItem.self)
+            
+            // Удаляем ID из Keychain
+            KeychainHelper.shared.delete(account: "my_user_id_v1")
+            
+            appState.logout() // Там внутри вызовется clearKeys() для приватного ключа
+        }
 }

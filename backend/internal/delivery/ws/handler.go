@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/yerkebulanrai/securemesh/backend/internal/repository"
+	"github.com/yerkebulanrai/securemesh/backend/pkg/auth"
 	pb "github.com/yerkebulanrai/securemesh/backend/pkg/proto"
 )
 
@@ -17,11 +18,9 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-// Теперь храним маппинг: UserID -> WebSocket
 type WebSocketHandler struct {
 	msgRepo *repository.MessageRepository
-	// Было: clients map[*websocket.Conn]bool
-	clients map[string]*websocket.Conn // Стало: ID -> Conn
+	clients map[string]*websocket.Conn
 	mutex   sync.Mutex
 }
 
@@ -33,19 +32,25 @@ func NewWebSocketHandler(repo *repository.MessageRepository) *WebSocketHandler {
 }
 
 func (h *WebSocketHandler) Handle(c echo.Context) error {
-	// 1. Получаем User ID из параметров подключения
-	// Клиент будет стучаться так: ws://host/ws?userID=...
-	userID := c.QueryParam("userID")
-	if userID == "" {
-		return c.String(http.StatusBadRequest, "userID is required")
+	// ===== ИЗМЕНЕНИЕ: Теперь берём токен вместо userID =====
+	token := c.QueryParam("token")
+	if token == "" {
+		return c.String(http.StatusUnauthorized, "token is required")
 	}
+
+	// Валидируем JWT и извлекаем userID
+	userID, err := auth.ValidateToken(token)
+	if err != nil {
+		log.Printf("❌ Invalid token: %v", err)
+		return c.String(http.StatusUnauthorized, "invalid or expired token")
+	}
+	// ========================================================
 
 	ws, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
 	if err != nil {
 		return err
 	}
 
-	// 2. Регистрируем конкретного пользователя
 	h.mutex.Lock()
 	h.clients[userID] = ws
 	h.mutex.Unlock()
@@ -54,7 +59,7 @@ func (h *WebSocketHandler) Handle(c echo.Context) error {
 
 	defer func() {
 		h.mutex.Lock()
-		delete(h.clients, userID) // Удаляем по ID
+		delete(h.clients, userID)
 		h.mutex.Unlock()
 		ws.Close()
 		log.Printf("👤 Пользователь отключился: %s", userID)
@@ -71,44 +76,34 @@ func (h *WebSocketHandler) Handle(c echo.Context) error {
 			continue
 		}
 
-		// ВАЖНО: Принудительно ставим sender_id, чтобы клиент не мог подделать его
+		// sender_id устанавливается сервером из JWT — нельзя подделать!
 		protoMsg.SenderId = userID
 
-		// Сохраняем в БД
 		if protoMsg.Type == pb.WebSocketMessage_TEXT_MESSAGE {
-			// Тут можно добавить проверку: если recipient_id пустой — ошибка
 			go h.msgRepo.Save(c.Request().Context(), &protoMsg)
 		}
 
-		// 3. Маршрутизация (Routing)
 		if protoMsg.RecipientId != "" {
-			// Если указан получатель — отправляем только ему
 			h.sendToUser(protoMsg.RecipientId, msgData)
 		} else {
-			// Если не указан — можно оставить Broadcast для тестов, или запретить
-			// Пока оставим эхо отправителю для теста
-			h.sendToUser(userID, msgData) 
+			h.sendToUser(userID, msgData)
 		}
 	}
 
 	return nil
 }
 
-// Функция отправки конкретному юзеру
 func (h *WebSocketHandler) sendToUser(recipientID string, data []byte) {
 	h.mutex.Lock()
 	targetConn, ok := h.clients[recipientID]
 	h.mutex.Unlock()
 
 	if ok {
-		// Получатель онлайн — отправляем
-		// Используем BinaryMessage (2), так как это Protobuf
 		err := targetConn.WriteMessage(websocket.BinaryMessage, data)
 		if err != nil {
 			log.Printf("❌ Ошибка отправки юзеру %s: %v", recipientID, err)
 		}
 	} else {
-		log.Printf("💤 Юзер %s офлайн (сообщение сохранено в БД, доставим потом)", recipientID)
-		// Здесь в будущем будет логика Push-уведомлений
+		log.Printf("💤 Юзер %s офлайн", recipientID)
 	}
 }

@@ -10,24 +10,13 @@ class AppStateManager: ObservableObject {
     }
     
     func checkLoginStatus() {
-        // Пытаемся восстановить ключи при запуске
-        CryptoService.shared.generateKeys()
-        
-        // Если ключи успешно загрузились (они не nil) — значит мы авторизованы
-        if CryptoService.shared.privateKey != nil {
-            isAuthenticated = true
-        } else {
-            isAuthenticated = false
-        }
+        // Пытаемся ТОЛЬКО ЗАГРУЗИТЬ. Если ключей нет — false.
+        isAuthenticated = CryptoService.shared.loadKeys()
     }
     
     func logout() {
-        // Удаляем ключи (сброс личности)
-        // В реальном проекте тут нужно чистить Keychain/UserDefaults надежнее
-        let domain = Bundle.main.bundleIdentifier!
-        UserDefaults.standard.removePersistentDomain(forName: domain)
-        UserDefaults.standard.synchronize()
-        
+        // Явное удаление ключей через наш новый метод
+        CryptoService.shared.clearKeys()
         isAuthenticated = false
     }
 }

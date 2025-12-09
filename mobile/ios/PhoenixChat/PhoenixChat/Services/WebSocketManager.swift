@@ -8,19 +8,23 @@ internal import Combine
 
 @MainActor
 class WebSocketManager: ObservableObject {
-    private let urlString = "ws://192.168.12.67:8080/ws"
+    // Теперь стучимся на DigitalOcean!
+    private let urlString = "ws://159.89.45.247:8080/ws"
     
-    // === ЖЕСТКАЯ ПРИВЯЗКА ID ===
-    private static let userA = "bdfa964b-06ca-4a33-b128-76c63f9edb4f"
-    private static let userB = "501c87ea-d2b1-437d-8b9b-2881faec0731"
-    
-    #if targetEnvironment(simulator)
-        private let myUserID = WebSocketManager.userB
-        private let targetUserID = WebSocketManager.userA
-    #else
-        private let myUserID = WebSocketManager.userA
-        private let targetUserID = WebSocketManager.userB
-    #endif
+    // === ТЕПЕРЬ ДИНАМИКА ===
+        // 1. Мой ID берем из памяти
+    // Берем ID из Keychain, если нет - генерим "unknown"
+    private var myUserID: String {
+            // Пытаемся прочитать из Keychain
+            if let data = KeychainHelper.shared.read(account: "my_user_id_v1"),
+               let idString = String(data: data, encoding: .utf8) {
+                return idString
+            }
+            return "unknown_user"
+        }
+        
+        // 2. ID собеседника будем задавать из UI
+        @Published var targetUserID: String = ""
 
     private var webSocketTask: URLSessionWebSocketTask?
     private var sharedSessionKey: SymmetricKey?
@@ -33,9 +37,16 @@ class WebSocketManager: ObservableObject {
     var modelContext: ModelContext?
     
     func connect() {
-        if CryptoService.shared.privateKey == nil {
-            CryptoService.shared.generateKeys()
-        }
+            // Если ключей нет в памяти, пробуем загрузить с диска
+            if CryptoService.shared.privateKey == nil {
+                _ = CryptoService.shared.loadKeys()
+            }
+            
+            // Если все равно нет — значит мы не авторизованы, выходим
+            if CryptoService.shared.privateKey == nil {
+                print("❌ Ошибка: Нет ключей шифрования для подключения")
+                return
+            }
         
         let fullURLString = "\(urlString)?userID=\(myUserID)"
         guard let url = URL(string: fullURLString) else { return }
@@ -57,6 +68,8 @@ class WebSocketManager: ObservableObject {
     }
     
     private func prepareEncryption() {
+        if targetUserID.isEmpty { return }
+        
         Task {
             do {
                 print("🕵️‍♂️ Ищем публичный ключ собеседника...")
@@ -126,6 +139,11 @@ class WebSocketManager: ObservableObject {
     }
     
     func sendProtoMessage(text: String) {
+        if targetUserID.isEmpty {
+                    print("❌ Ошибка: Не указан ID получателя")
+                    return
+                }
+        
         guard let sessionKey = self.sharedSessionKey else {
             print("⛔️ Ключи еще не готовы...")
             prepareEncryption()

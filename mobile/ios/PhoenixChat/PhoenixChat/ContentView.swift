@@ -11,27 +11,34 @@ class RegistrationViewModel: ObservableObject {
     private let authService = AuthService()
     
     func register() {
-        guard !username.isEmpty else { return }
-        
-        isLoading = true
-        statusMessage = "Генерация ключей..."
-        
-        Task {
-            do {
-                // 1. Генерируем ключи
-                CryptoService.shared.generateKeys()
-                
-                // 2. Достаем публичный ключ
-                guard let realPublicKey = CryptoService.shared.getPublicKeyString() else {
-                    statusMessage = "Ошибка генерации ключей"
-                    isLoading = false
-                    return
-                }
-                
-                // 3. Отправляем на сервер
-                let response = try await authService.register(username: username, publicKey: realPublicKey)
-                
-                self.statusMessage = "Успех! ID: \(response.userId)"
+            guard !username.isEmpty else { return }
+            
+            isLoading = true
+            statusMessage = "Генерация ключей..."
+            
+            Task {
+                do {
+                    // 1. ЯВНО СОЗДАЕМ НОВЫЕ КЛЮЧИ
+                    CryptoService.shared.createNewKeys() // <--- ИЗМЕНЕНИЕ ЗДЕСЬ
+                    
+                    // 2. Достаем публичный ключ
+                    guard let realPublicKey = CryptoService.shared.getPublicKeyString() else {
+                        statusMessage = "Ошибка генерации ключей"
+                        isLoading = false
+                        return
+                    }
+                    
+                    // 3. Отправляем на сервер... (дальше код без изменений)
+                    let response = try await authService.register(username: username, publicKey: realPublicKey)
+                        
+                        // === СОХРАНЯЕМ ID НАВСЕГДА ===
+                    // В методе register() вместо UserDefaults:
+                    if let idData = response.userId.data(using: .utf8) {
+                            KeychainHelper.shared.save(idData, account: "my_user_id_v1")
+                        }
+                        // =============================
+                        
+                        self.statusMessage = "Успех! ID: \(response.userId)"
                 
                 // === ПРИНТ ДЛЯ КОПИРОВАНИЯ ===
                 print("\n==================================================")

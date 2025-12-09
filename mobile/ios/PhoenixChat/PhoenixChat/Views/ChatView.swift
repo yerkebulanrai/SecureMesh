@@ -32,6 +32,16 @@ struct ChatView: View {
             .padding()
             .background(Color(uiColor: .systemGroupedBackground))
             
+            TextField("Вставь ID собеседника сюда", text: $wsManager.targetUserID)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.caption) // Сделаем поменьше, ID длинный
+                                .onChange(of: wsManager.targetUserID) {_, _ in
+                                    // Если ID изменился, пробуем обменяться ключами
+                                    if wsManager.targetUserID.count > 10 {
+                                        wsManager.connect() // Перезапуск шифрования
+                                    }
+                                }
+            
             // Список сообщений
             ScrollViewReader { proxy in
                 ScrollView {
@@ -62,7 +72,7 @@ struct ChatView: View {
                     }
                     .padding(.vertical)
                 }
-                .onChange(of: messages) { _ in
+                .onChange(of: messages) {_, _ in
                     if let last = messages.last {
                         withAnimation {
                             proxy.scrollTo(last.id, anchor: .bottom)
